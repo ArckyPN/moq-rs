@@ -41,23 +41,43 @@ impl FFmpeg {
 		let (tx, rx) = tokio::sync::mpsc::channel(1);
 		let (control_tx, mut control_rx) = tokio::sync::broadcast::channel(1);
 
+		// spawn closer thread
 		let ctrl_tx = control_tx.clone();
 		thread::Builder::new().name("closer".to_string()).spawn(move || {
 			let rt = tokio::runtime::Runtime::new().unwrap();
-			rt.block_on(async { close(ctrl_tx).await.expect("close error") })
+			rt.block_on(async {
+				if close(ctrl_tx.clone()).await.is_err() {
+					ctrl_tx.send(()).expect("closer error");
+				}
+			})
 		})?;
+
+		// spawn watcher thread
 		let ctrl_rx = control_tx.subscribe();
+		let ctrl_tx = control_tx.clone();
 		let target = self.output.clone();
 		thread::Builder::new().name("watcher".to_string()).spawn(move || {
 			let rt = tokio::runtime::Runtime::new().unwrap();
-			rt.block_on(async { watch(ctrl_rx, tx, target).await.expect("watch error") })
-		})?;
-		let ctrl_rx = control_tx.subscribe();
-		thread::Builder::new().name("publisher".to_string()).spawn(move || {
-			let rt = tokio::runtime::Runtime::new().unwrap();
-			rt.block_on(async { publish(ctrl_rx, rx).await.expect("publisher error") })
+			rt.block_on(async {
+				if watch(ctrl_rx, tx, target).await.is_err() {
+					ctrl_tx.send(()).expect("watch error");
+				}
+			})
 		})?;
 
+		// spawn publisher thread
+		let ctrl_rx = control_tx.subscribe();
+		let ctrl_tx = control_tx.clone();
+		thread::Builder::new().name("publisher".to_string()).spawn(move || {
+			let rt = tokio::runtime::Runtime::new().unwrap();
+			rt.block_on(async {
+				if publish(ctrl_rx, rx).await.is_err() {
+					ctrl_tx.send(()).expect("publisher error");
+				}
+			})
+		})?;
+
+		// block until control channel stops
 		loop {
 			match control_rx.try_recv() {
 				Ok(_) | Err(TryRecvError::Closed) | Err(TryRecvError::Lagged(_)) => break,
@@ -71,6 +91,7 @@ impl FFmpeg {
 		ffmpeg.kill()?;
 
 		helper::clear_output(&self.output)?;
+
 		Ok(())
 	}
 }
@@ -90,10 +111,11 @@ where
 
 	watcher.watch(target.as_ref(), notify::RecursiveMode::NonRecursive)?;
 
+	// receive fs events
 	for evt in recv {
-		// TODO maybe skip Error in Event, if often crashing?
 		let event = evt?;
 
+		// verify if we're still good
 		match control_rx.try_recv() {
 			Ok(_) | Err(TryRecvError::Closed) | Err(TryRecvError::Lagged(_)) => break,
 			Err(TryRecvError::Empty) => (),
@@ -112,6 +134,8 @@ async fn publish(
 	// TODO receive chunks from channel and publish to moq
 	while let Some(chunk) = rx.recv().await {
 		println!("Publish: {}", chunk);
+
+		// verify if we're still good
 		match control_rx.try_recv() {
 			Ok(_) | Err(TryRecvError::Closed) | Err(TryRecvError::Lagged(_)) => break,
 			Err(TryRecvError::Empty) => (),

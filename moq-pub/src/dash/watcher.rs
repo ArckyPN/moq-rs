@@ -6,7 +6,7 @@ use notify::{
 };
 use tokio::{
 	fs,
-	io::{self, AsyncReadExt, AsyncSeekExt},
+	io::{AsyncReadExt, AsyncSeekExt},
 	sync::RwLock,
 };
 
@@ -20,20 +20,21 @@ impl FsEventHandler {
 	}
 
 	pub async fn handle(&mut self, event: notify::Event, tx: tokio::sync::mpsc::Sender<Chunk>) -> anyhow::Result<()> {
-		// println!("Event {:?}", event);
 		match event.kind {
 			Create(File) => {
+				// watch segment files in chunks
 				self.insert(&event.paths).await?;
 			}
 			Modify(Data(_)) => {
+				// new chunk has been written, send to publisher
 				self.send_chunk(&event.paths, tx).await?;
 			}
 			Access(Close(Write)) => {
+				// file is finished, make sure to really have everything
 				self.send_chunk(&event.paths, tx).await?;
 
 				self.delete(&event.paths).await?;
 			}
-			// Modify(Name(To))?
 			_ => (),
 		}
 		Ok(())
@@ -72,22 +73,29 @@ impl FsEventHandler {
 
 		let offset = self.get(&path).await;
 
+		// open file in read mode
 		let mut fp = match fs::File::open(&path).await {
 			Ok(fp) => fp,
 			Err(e) => {
+				// if file not found, attempt again on the finished file
+				// otherwise return error
 				if e.kind() != std::io::ErrorKind::NotFound {
 					return Err(e.into());
 				}
 				fs::File::open(path.replace(".tmp", "")).await?
 			}
 		};
+		// seek to file off set
 		fp.seek(SeekFrom::Start(offset as u64)).await?;
 
+		// get file set
 		let size = fp.metadata().await?.len() as usize;
 
+		// create buffer to read from offset to end
 		let mut contents = vec![0u8; size - offset];
 		fp.read_exact(&mut contents).await?;
 
+		// cache new offset
 		self.set(&path, size).await;
 
 		Ok(contents)

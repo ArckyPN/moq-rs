@@ -7,7 +7,4 @@ pub enum Error {
 
 	#[error("failed to convert")]
 	FailedToConvert,
-
-	#[error("getter returned None")]
-	ElementNotCached,
 }
