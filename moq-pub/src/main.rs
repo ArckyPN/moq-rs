@@ -1,17 +1,33 @@
 use bytes::BytesMut;
-use std::net;
+use std::{fs, net, path};
 use url::Url;
 
 use anyhow::Context;
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use tokio::io::AsyncReadExt;
 
 use moq_native::quic;
 use moq_pub::Media;
 use moq_transport::{serve, session::Publisher};
 
-#[derive(Parser, Clone)]
+mod dash;
+
+#[derive(Parser)]
 pub struct Cli {
+	#[command(subcommand)]
+	pub(crate) command: Commands,
+}
+#[derive(Subcommand)]
+enum Commands {
+	/// Original Publisher
+	Run(Original),
+
+	/// Dash Publisher
+	Dash(Dash),
+}
+
+#[derive(Args, Clone)]
+struct Original {
 	/// Listen for UDP packets on the given address.
 	#[arg(long, default_value = "[::]:0")]
 	pub bind: net::SocketAddr,
@@ -39,6 +55,41 @@ pub struct Cli {
 	pub tls: moq_native::tls::Args,
 }
 
+#[derive(Args, Clone)]
+struct Dash {
+	/// The path to ffmpeg input, default is integrated laptop camera (Linux: /dev/video0)
+	#[arg(short, long, default_value = "/dev/video0")]
+	pub input: path::PathBuf,
+
+	/// The path to DASH Manifest output file (.mpd)
+	#[arg(short, long)]
+	pub output: path::PathBuf,
+
+	/// The path to the Settings file
+	#[arg(short = 's', long = "settings", default_value = "../media/settings.csv")]
+	pub settings_file: path::PathBuf,
+
+	/// The name of the broadcast
+	#[arg(long)]
+	pub name: String,
+
+	/// Set to not publish audio
+	#[arg(long)]
+	pub no_audio: bool,
+
+	/// Listen for UDP packets on the given address.
+	#[arg(long, default_value = "[::]:0")]
+	pub bind: net::SocketAddr,
+
+	/// Connect to the given URL starting with https://
+	#[arg()]
+	pub url: Url,
+
+	/// The TLS configuration.
+	#[command(flatten)]
+	pub tls: moq_native::tls::Args,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
 	env_logger::init();
@@ -51,6 +102,15 @@ async fn main() -> anyhow::Result<()> {
 
 	let cli = Cli::parse();
 
+	match cli.command {
+		Commands::Run(args) => run_orignal(args).await.unwrap(),
+		Commands::Dash(args) => run_dash(args).await.unwrap(),
+	}
+
+	Ok(())
+}
+
+async fn run_orignal(cli: Original) -> anyhow::Result<()> {
 	let (writer, _, reader) = serve::Tracks::new(cli.name).produce();
 	let media = Media::new(writer)?;
 
@@ -73,6 +133,14 @@ async fn main() -> anyhow::Result<()> {
 		res = run_media(media) => res.context("media error")?,
 		res = publisher.announce(reader) => res.context("publisher error")?,
 	}
+
+	Ok(())
+}
+
+async fn run_dash(cli: Dash) -> anyhow::Result<()> {
+	let ffmpeg = dash::FFmpeg::new(cli)?;
+
+	ffmpeg.run().await?;
 
 	Ok(())
 }
