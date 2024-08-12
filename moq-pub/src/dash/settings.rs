@@ -1,16 +1,19 @@
+use anyhow::Context;
 use bytes::Buf;
-use std::{fs, path};
+use std::{collections::HashMap, fs, path};
 
 use super::helper;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Settings {
 	pub gop_num: u64,
 	pub audio_sampling_rate: u64,
 	pub audio_bitrate: u64,
 	pub fps: u64,
 	pub target_segment_duration: f64,
-	pub reps: Vec<Setting>,
+	pub reps: HashMap<String, Setting>,
+	pub order: Vec<String>,
+	current: usize,
 }
 
 impl Settings {
@@ -25,7 +28,7 @@ impl Settings {
 		let (gop_num, audio_sampling_rate, audio_bitrate, fps, target_segment_duration) =
 			Self::parse_key_pairs(key_pairs)?;
 
-		let reps = Setting::vec_from_bytes(csv_vec)?;
+		let (reps, order) = Setting::map_from_bytes(csv_vec)?;
 
 		Ok(Self {
 			gop_num,
@@ -34,10 +37,12 @@ impl Settings {
 			fps,
 			target_segment_duration,
 			reps,
+			order,
+			current: 0,
 		})
 	}
 
-	pub fn to_args<P>(&self, input: P, output: P, no_audio: bool) -> anyhow::Result<Vec<String>>
+	pub fn to_args<P>(&self, input: P, output: P, no_audio: bool, looping: bool) -> anyhow::Result<Vec<String>>
 	where
 		P: AsRef<path::Path>,
 	{
@@ -46,15 +51,20 @@ impl Settings {
 		let fragment_duration = format!("{:.3}", 1_f64 / self.fps as f64);
 		let segment_duration = format!("{:.3}", self.parse_segment_duration());
 
-		let mut input_args = vec![
-			"-fflags",
-			"+genpts",
-			"-re",
-			"-stream_loop",
-			"-1", // TODO need this for webcam?
-			"-i",
-			input.as_ref().to_str().unwrap(),
-		];
+		let mut input_args = vec!["-fflags", "+genpts", "-re"];
+
+		if looping {
+			input_args.append(&mut vec!["-stream_loop", "-1"]);
+		}
+
+		let input = input.as_ref().to_str().context("input not found")?;
+
+		input_args.append(&mut vec!["-i", input]);
+
+		// if input == "/dev/video0" {
+		// 	// FIXME record audio, this doesn't work
+		// 	input_args.append(&mut vec!["-f", "alsa", "-i", "hw:1"]);
+		// }
 
 		args.append(&mut input_args);
 
@@ -72,10 +82,10 @@ impl Settings {
 			"-sc_threshold",
 			"0",
 			"-r",
-			"25",
+			"25", // TODO use framerate
 			"-keyint_min",
 			"48",
-			"-g",
+			"-g", // TODO use gop_num
 			"48",
 			"-aspect",
 			"16:9",
@@ -96,7 +106,7 @@ impl Settings {
 			"-seg_duration",
 			&segment_duration,
 			"-adaptation_sets",
-			"id=0,streams=v",
+			"id=0,streams=v id=1,streams=a",
 			"-use_timeline",
 			"1",
 			"-streaming",
@@ -120,9 +130,9 @@ impl Settings {
 			"-frag_duration",
 			&fragment_duration,
 			"-init_seg_name",
-			"source_rep_$RepresentationID$_init.$ext$",
+			"source_init_rep_$RepresentationID$.$ext$",
 			"-media_seg_name",
-			"source_chunk_rep_$RepresentationID$_$Number%05d$.$ext$",
+			"source_chunk_$Number%05d$_rep_$RepresentationID$.$ext$",
 			"-f",
 			"dash",
 			output.to_str().unwrap(),
@@ -135,11 +145,57 @@ impl Settings {
 		Ok(args)
 	}
 
+	pub fn save<P>(&self, path: P, args: &[String]) -> anyhow::Result<()>
+	where
+		P: AsRef<path::Path>,
+	{
+		// FIXME input and output path to work from the save location
+		let mut buf = b"#!/bin/bash\n\n".to_vec();
+
+		let mut ffmpeg = "ffmpeg".as_bytes().to_vec();
+		buf.append(&mut ffmpeg);
+
+		let (input, args) = args.split_at(args.iter().position(|arg| arg == "-i").context("missing input flag")? + 2);
+		let input = vec![input[0].clone()];
+		helper::append_shell(&mut buf, &input);
+
+		let (filter_complex, args) = args.split_at(
+			args.iter()
+				.position(|arg| arg == "-filter_complex")
+				.context("missing filter_complex flag")?
+				+ 2,
+		);
+
+		if filter_complex.len() != 2 {
+			anyhow::bail!("invalid filter complex flag");
+		}
+
+		let filter_complex = vec![
+			filter_complex[0].clone(),
+			format!("\"{}\"", filter_complex[1].replace(';', "; \\\n\t\t")),
+		];
+		helper::append_shell(&mut buf, &filter_complex);
+
+		let (streams, args) = args.split_at(args.iter().position(|arg| arg == "-map").context("missing map flag")?);
+		let chunks = streams.chunks(6);
+		for chunk in chunks {
+			helper::append_shell(&mut buf, chunk);
+		}
+
+		let chunks = args.chunks(2);
+		for chunk in chunks {
+			helper::append_shell(&mut buf, chunk);
+		}
+
+		std::fs::write(path, buf)?;
+		Ok(())
+	}
+
 	fn filter_complex(&self) -> Vec<String> {
 		let mut split = format!("split={}", self.reps.len());
 		let mut resolutions = Vec::new();
 
-		for (i, rep) in self.reps.iter().enumerate() {
+		for (i, rep) in self.reps.iter() {
 			split += format!("[v{}]", i).as_str();
 			resolutions.push(format!("[v{}]scale={}[v{}]", i, rep.resolution.clone().unwrap(), i));
 		}
@@ -152,7 +208,7 @@ impl Settings {
 	fn qualities(&self) -> Vec<String> {
 		let mut args = Vec::new();
 
-		for (i, rep) in self.reps.iter().enumerate() {
+		for (i, rep) in self.clone().enumerate() {
 			args.push(format!("-b:v:{i}"));
 			args.push(format!("{}K", rep.bitrate.unwrap()));
 
@@ -254,7 +310,20 @@ impl Settings {
 	}
 }
 
-#[derive(Debug, serde::Deserialize)]
+impl std::iter::Iterator for Settings {
+	type Item = Setting;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.current == self.order.len() {
+			return None;
+		}
+		let next = self.reps.get(&self.order[self.current]);
+		self.current += 1;
+		next.cloned()
+	}
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct Setting {
 	pub resolution: Option<String>,
 	pub bitrate: Option<u64>,
@@ -263,14 +332,17 @@ pub struct Setting {
 }
 
 impl Setting {
-	pub fn vec_from_bytes(buf: Vec<u8>) -> anyhow::Result<Vec<Self>> {
+	pub fn map_from_bytes(buf: Vec<u8>) -> anyhow::Result<(HashMap<String, Self>, Vec<String>)> {
 		let mut vec = Vec::new();
+		let mut map = HashMap::new();
 		let mut reader = csv::Reader::from_reader(buf.as_slice().reader());
 
-		for res in reader.deserialize() {
-			vec.push(res?);
+		for (counter, res) in reader.deserialize().enumerate() {
+			let key = format!("{}", counter);
+			map.insert(key.clone(), res?);
+			vec.push(key);
 		}
 
-		Ok(vec)
+		Ok((map, vec))
 	}
 }

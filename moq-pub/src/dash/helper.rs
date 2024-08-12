@@ -67,3 +67,11 @@ where
 
 	Ok(path)
 }
+
+pub fn append_shell(buf: &mut Vec<u8>, slice: &[String]) {
+	let mut b = format!(" \\\n\t{}", slice.join(" "))
+		.replace('$', "\\$")
+		.as_bytes()
+		.to_vec();
+	buf.append(&mut b);
+}

@@ -1,4 +1,5 @@
 mod chunk;
+mod dash;
 mod error;
 mod ffmpeg;
 mod helper;
