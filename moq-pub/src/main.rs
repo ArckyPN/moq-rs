@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use std::{fs, net, path};
+use std::{net, path};
 use url::Url;
 
 use anyhow::Context;
@@ -22,7 +22,7 @@ enum Commands {
 	/// Original Publisher
 	Run(Original),
 
-	/// Dash Publisher
+	/// Dash fMP4 Publisher
 	Dash(Dash),
 }
 
@@ -39,8 +39,8 @@ struct Original {
 
 	/// Advertise this bit rate in the catalog (informational)
 	// TODO auto-detect this from the input when not provided
-	#[arg(long, default_value = "1500000")]
-	pub bitrate: u32,
+	#[arg(short, long, num_args = 1.., value_delimiter = ',')]
+	pub bitrate: Vec<u32>,
 
 	/// Connect to the given URL starting with https://
 	#[arg()]
@@ -76,6 +76,9 @@ struct Dash {
 	/// Set to not publish audio
 	#[arg(long)]
 	pub no_audio: bool,
+
+	#[arg(long = "loop")]
+	pub looping: bool,
 
 	/// Listen for UDP packets on the given address.
 	#[arg(long, default_value = "[::]:0")]
@@ -137,14 +140,6 @@ async fn run_orignal(cli: Original) -> anyhow::Result<()> {
 	Ok(())
 }
 
-async fn run_dash(cli: Dash) -> anyhow::Result<()> {
-	let ffmpeg = dash::FFmpeg::new(cli)?;
-
-	ffmpeg.run().await?;
-
-	Ok(())
-}
-
 async fn run_media(mut media: Media) -> anyhow::Result<()> {
 	let mut input = tokio::io::stdin();
 	let mut buf = BytesMut::new();
@@ -153,4 +148,12 @@ async fn run_media(mut media: Media) -> anyhow::Result<()> {
 		input.read_buf(&mut buf).await.context("failed to read from stdin")?;
 		media.parse(&mut buf).context("failed to parse media")?;
 	}
+}
+
+async fn run_dash(cli: Dash) -> anyhow::Result<()> {
+	let ffmpeg = dash::FFmpeg::new(cli)?;
+
+	ffmpeg.run().await?;
+
+	Ok(())
 }

@@ -2,7 +2,6 @@ use anyhow::{self, Context};
 use bytes::{Buf, Bytes};
 use moq_transport::serve::{GroupWriter, GroupsWriter, TrackWriter, TracksWriter};
 use mp4::{self, ReadBox, TrackType};
-use serde_json::json;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -15,13 +14,14 @@ pub struct Media {
 	// The full broadcast of tracks
 	broadcast: TracksWriter,
 
-	// The init and catalog tracks
-	init: GroupsWriter,
-	catalog: GroupsWriter,
+	// The catalog and its track
+	catalog_pub: moq_transport::serve::GroupsWriter,
+	catalog: moq_catalog::MoqCatalog,
 
 	// The ftyp and moov atoms at the start of the file.
 	ftyp: Option<Bytes>,
 	moov: Option<mp4::MoovBox>,
+	prft: Option<Bytes>,
 
 	// The current track name
 	current: Option<u32>,
@@ -29,16 +29,24 @@ pub struct Media {
 
 impl Media {
 	pub fn new(mut broadcast: TracksWriter) -> anyhow::Result<Self> {
-		let catalog = broadcast.create(".catalog").context("broadcast closed")?.groups()?;
-		let init = broadcast.create("0.mp4").context("broadcast closed")?.groups()?;
+		let catalog_pub = broadcast.create(".catalog").context("broadcast closed")?.groups()?;
+		let mut catalog = moq_catalog::MoqCatalog::new();
+
+		let mut csf = moq_catalog::CommonStructFields::new("", moq_catalog::Packaging::CMAF);
+		csf.set_alt_group(1)
+			.set_label("Dash MoQ")
+			.set_namespace(&broadcast.namespace);
+
+		catalog.enable_delta_updates().set_common_track_fields(csf);
 
 		Ok(Media {
 			tracks: Default::default(),
 			broadcast,
+			catalog_pub,
 			catalog,
-			init,
 			ftyp: None,
 			moov: None,
+			prft: None,
 			current: None,
 		})
 	}
@@ -60,6 +68,9 @@ impl Media {
 		let header = mp4::BoxHeader::read(&mut reader)?;
 
 		match header.name {
+			n if n.to_string() == *"prft" => {
+				self.prft.replace(atom);
+			}
 			mp4::BoxType::FtypBox => {
 				if self.ftyp.is_some() {
 					anyhow::bail!("multiple ftyp atoms");
@@ -146,26 +157,19 @@ impl Media {
 		let mut init = self.ftyp.clone().context("missing ftyp")?.to_vec();
 		init.extend_from_slice(&raw);
 
-		// Create the catalog track with a single segment.
-		self.init.append(0)?.write(init.into())?;
-
-		let mut tracks = Vec::new();
+		// Add the init to CSF Init Data
+		if let Some(csf) = self.catalog.common_track_fields_mut() {
+			csf.set_init_data(&init);
+		}
 
 		// Produce the catalog
 		for trak in &moov.traks {
-			let mut track = json!({
-				"container": "mp4",
-				"init_track": "0.mp4",
-				"data_track": format!("{}.m4s", trak.tkhd.track_id),
-			});
+			let rep_id = format!("{}.m4s", trak.tkhd.track_id);
+			let mut track = moq_catalog::Track::new(&rep_id, moq_catalog::Packaging::CMAF);
+			let mut params = moq_catalog::SelectionParams::new();
 
 			let stsd = &trak.mdia.minf.stbl.stsd;
 			if let Some(avc1) = &stsd.avc1 {
-				// avc1[.PPCCLL]
-				//
-				// let profile = 0x64;
-				// let constraints = 0x00;
-				// let level = 0x1f;
 				let profile = avc1.avcc.avc_profile_indication;
 				let constraints = avc1.avcc.profile_compatibility; // Not 100% certain here, but it's 0x00 on my current test video
 				let level = avc1.avcc.avc_level_indication;
@@ -176,10 +180,14 @@ impl Media {
 				let codec = rfc6381_codec::Codec::avc1(profile, constraints, level);
 				let codec_str = codec.to_string();
 
-				track["kind"] = json!("video");
-				track["codec"] = json!(codec_str);
-				track["width"] = json!(width);
-				track["height"] = json!(height);
+				// TODO add bitrate
+				println!("{:#?}", avc1);
+
+				params
+					.set_height(height)
+					.set_width(width)
+					.set_codec(&codec_str)
+					.set_mime_type("video/mp4")?;
 			} else if let Some(_hev1) = &stsd.hev1 {
 				// TODO https://github.com/gpac/mp4box.js/blob/325741b592d910297bf609bc7c400fc76101077b/src/box-codecs.js#L106
 				anyhow::bail!("HEVC not yet supported")
@@ -192,25 +200,25 @@ impl Media {
 					.dec_config;
 				let codec_str = format!("mp4a.{:02x}.{}", desc.object_type_indication, desc.dec_specific.profile);
 
-				track["kind"] = json!("audio");
-				track["codec"] = json!(codec_str);
-				track["channel_count"] = json!(mp4a.channelcount);
-				track["sample_rate"] = json!(mp4a.samplerate.value());
-				track["sample_size"] = json!(mp4a.samplesize);
+				params
+					.set_codec(&codec_str)
+					.set_mime_type("audio/mp4")?
+					.set_sample_rate(mp4a.samplerate.value());
 
 				let bitrate = max(desc.max_bitrate, desc.avg_bitrate);
 				if bitrate > 0 {
-					track["bit_rate"] = json!(bitrate);
+					params.set_bitrate(bitrate as u64);
 				}
 			} else if let Some(vp09) = &stsd.vp09 {
 				// https://github.com/gpac/mp4box.js/blob/325741b592d910297bf609bc7c400fc76101077b/src/box-codecs.js#L238
-				let vpcc = &vp09.vpcc;
-				let codec_str = format!("vp09.0.{:02x}.{:02x}.{:02x}", vpcc.profile, vpcc.level, vpcc.bit_depth);
+				// let vpcc = &vp09.vpcc;
+				// let codec_str = format!("vp09.0.{:02x}.{:02x}.{:02x}", vpcc.profile, vpcc.level, vpcc.bit_depth);
 
-				track["kind"] = json!("video");
-				track["codec"] = json!(codec_str);
-				track["width"] = json!(vp09.width); // no idea if this needs to be multiplied
-				track["height"] = json!(vp09.height); // no idea if this needs to be multiplied
+				// track["kind"] = json!("video");
+				// track["codec"] = json!(codec_str);
+				// track["width"] = json!(vp09.width); // no idea if this needs to be multiplied
+				// track["height"] = json!(vp09.height); // no idea if this needs to be multiplied
+				let _ = vp09;
 
 				// TODO Test if this actually works; I'm just guessing based on mp4box.js
 				anyhow::bail!("VP9 not yet supported")
@@ -219,18 +227,18 @@ impl Media {
 				anyhow::bail!("unknown codec for track: {}", trak.tkhd.track_id);
 			}
 
-			tracks.push(track);
+			track.set_selection_params(params);
+
+			// tracks.push(track);
+			self.catalog.insert_track(track)?;
 		}
 
-		let catalog = json!({
-			"tracks": tracks
-		});
+		log::info!("published catalog: {:#?}", self.catalog);
 
-		let catalog_str = serde_json::to_string_pretty(&catalog)?;
-		log::info!("catalog: {}", catalog_str);
+		let buf = self.catalog.encode()?;
 
 		// Create a single fragment for the segment.
-		self.catalog.append(0)?.write(catalog_str.into())?;
+		self.catalog_pub.append(0)?.write(buf.into())?;
 
 		Ok(())
 	}
