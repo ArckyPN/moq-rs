@@ -115,7 +115,8 @@ async fn main() -> anyhow::Result<()> {
 
 async fn run_orignal(cli: Original) -> anyhow::Result<()> {
 	let (writer, _, reader) = serve::Tracks::new(cli.name).produce();
-	let media = Media::new(writer)?;
+	let bitrates = cli.bitrate.clone();
+	let media = Media::new(writer, bitrates)?;
 
 	let tls = cli.tls.load()?;
 

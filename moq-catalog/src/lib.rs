@@ -178,6 +178,88 @@ impl MoqCatalog {
 	}
 }
 
+impl std::fmt::Display for MoqCatalog {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let mut out = format!(
+			"MoqCatalog: v{}, format: {} Version {}\n",
+			self.version, self.streaming_format, self.streaming_format_version
+		);
+		if self.tracks.is_some() {
+			out += &format!("containing {} tracks:\n", self.tracks.as_ref().unwrap().len());
+			let (mut res, mut bitrate, mut mime, mut codec, mut name) = (0, 0, 0, 0, 0);
+			for track in self.tracks.as_ref().unwrap().iter() {
+				if let Some(params) = track.selection_params() {
+					let width = params.width.unwrap_or_default();
+					let height = params.height.unwrap_or_default();
+
+					let res_len = width.checked_ilog10().unwrap_or(1) + height.checked_ilog10().unwrap_or(1) + 3;
+					if res_len > res {
+						res = res_len;
+					}
+
+					let br = params.bitrate.unwrap_or_default() / 1_000;
+					let bitrate_len = br.checked_ilog10().unwrap_or(1) + 1;
+					if bitrate_len > bitrate {
+						bitrate = bitrate_len;
+					}
+
+					let mim = params.mime_type.clone().unwrap_or("no mime".to_string());
+					let mime_len = mim.len();
+					if mime_len > mime {
+						mime = mime_len;
+					}
+
+					let code = params.codec.clone().unwrap_or("no codec".to_string());
+					let codec_len = code.len();
+					if codec_len > codec {
+						codec = codec_len;
+					}
+				}
+
+				let name_len = track.name.len();
+				if name_len > name {
+					name = name_len;
+				}
+			}
+			for (i, track) in self.tracks.as_ref().unwrap().iter().enumerate() {
+				let (res_str, mime_str, codec_str, br) = if let Some(params) = track.selection_params() {
+					let res_str = format!(
+						"{}x{}",
+						params.width.unwrap_or_default(),
+						params.height.unwrap_or_default()
+					);
+					let mime_str = params.mime_type.clone().unwrap_or("no mime".to_string());
+					let codec_str = params.codec.clone().unwrap_or("no codec".to_string());
+					let br = params.bitrate.unwrap_or(0) / 1_000;
+					(res_str, mime_str, codec_str, br)
+				} else {
+					("0x0".to_string(), "no_mime".to_string(), "no codec".to_string(), 0)
+				};
+				out += &format!(
+					"{i:>3}: {name:>name_width$}, {bitrate:>bitrate_width$} kbps {resolution:>resolution_width$} {codec:>codec_width$} {mime:>mime_width$}\n",
+					name = track.name,
+					name_width = name,
+					bitrate = br,
+					bitrate_width = bitrate as usize,
+					resolution = res_str,
+					resolution_width = res as usize,
+					codec = codec_str,
+					codec_width = codec,
+					mime = mime_str,
+					mime_width = mime,
+				);
+			}
+		}
+		if self.catalogs.is_some() {
+			out += &format!("containing {} catalogs:\n", self.catalogs.as_ref().unwrap().len());
+			for (i, catalog) in self.catalogs.as_ref().unwrap().iter().enumerate() {
+				out += &format!("{i:3}: {}", catalog.name);
+			}
+		}
+		write!(f, "{}", out)
+	}
+}
+
 impl std::default::Default for MoqCatalog {
 	fn default() -> Self {
 		Self {
@@ -639,6 +721,10 @@ impl Track {
 	pub fn set_selection_params(&mut self, params: SelectionParams) -> &mut Self {
 		self.selection_params = Some(params);
 		self
+	}
+
+	pub fn selection_params(&self) -> Option<&SelectionParams> {
+		self.selection_params.as_ref()
 	}
 }
 

@@ -25,10 +25,12 @@ pub struct Media {
 
 	// The current track name
 	current: Option<u32>,
+
+	bitrates: Vec<u32>,
 }
 
 impl Media {
-	pub fn new(mut broadcast: TracksWriter) -> anyhow::Result<Self> {
+	pub fn new(mut broadcast: TracksWriter, bitrates: Vec<u32>) -> anyhow::Result<Self> {
 		let catalog_pub = broadcast.create(".catalog").context("broadcast closed")?.groups()?;
 		let mut catalog = moq_catalog::MoqCatalog::new();
 
@@ -48,6 +50,7 @@ impl Media {
 			moov: None,
 			prft: None,
 			current: None,
+			bitrates,
 		})
 	}
 
@@ -180,13 +183,14 @@ impl Media {
 				let codec = rfc6381_codec::Codec::avc1(profile, constraints, level);
 				let codec_str = codec.to_string();
 
-				// TODO add bitrate
-				println!("{:#?}", avc1);
+				let index = trak.tkhd.track_id as usize - 1;
+				let bitrate = self.bitrates[index] as u64;
 
 				params
 					.set_height(height)
 					.set_width(width)
 					.set_codec(&codec_str)
+					.set_bitrate(bitrate)
 					.set_mime_type("video/mp4")?;
 			} else if let Some(_hev1) = &stsd.hev1 {
 				// TODO https://github.com/gpac/mp4box.js/blob/325741b592d910297bf609bc7c400fc76101077b/src/box-codecs.js#L106
@@ -233,7 +237,8 @@ impl Media {
 			self.catalog.insert_track(track)?;
 		}
 
-		log::info!("published catalog: {:#?}", self.catalog);
+		log::info!("published catalog");
+		println!("{}", self.catalog);
 
 		let buf = self.catalog.encode()?;
 
