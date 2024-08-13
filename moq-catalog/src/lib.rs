@@ -197,6 +197,14 @@ impl std::fmt::Display for MoqCatalog {
 						res = res_len;
 					}
 
+					if let Some(sample) = params.sample_rate {
+						let sample = sample / 1_000;
+						let sample = sample.checked_ilog10().unwrap_or_default() + 5;
+						if sample > res {
+							res = sample;
+						}
+					}
+
 					let br = params.bitrate.unwrap_or_default() / 1_000;
 					let bitrate_len = br.checked_ilog10().unwrap_or(1) + 1;
 					if bitrate_len > bitrate {
@@ -223,11 +231,11 @@ impl std::fmt::Display for MoqCatalog {
 			}
 			for (i, track) in self.tracks.as_ref().unwrap().iter().enumerate() {
 				let (res_str, mime_str, codec_str, br) = if let Some(params) = track.selection_params() {
-					let res_str = format!(
-						"{}x{}",
-						params.width.unwrap_or_default(),
-						params.height.unwrap_or_default()
-					);
+					let res_str = match (params.width, params.height, params.sample_rate) {
+						(Some(w), Some(h), None) => format!("{}x{}", w, h),
+						(None, None, Some(s)) => format!("{} kbps", s / 1_000),
+						_ => "-".to_string(),
+					};
 					let mime_str = params.mime_type.clone().unwrap_or("no mime".to_string());
 					let codec_str = params.codec.clone().unwrap_or("no codec".to_string());
 					let br = params.bitrate.unwrap_or(0) / 1_000;
