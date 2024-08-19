@@ -185,7 +185,7 @@ impl Publisher {
 		}
 
 		let Some(settings) = self.settings.get_rep(rep_id) else {
-			println!("Error: missing Settings for {} track", rep_id);
+			println!("Error: missing Settings for rep {}", rep_id);
 			return Err(Error::Missing);
 		};
 		let track_name = match settings {
@@ -283,7 +283,10 @@ impl Publisher {
 			return Err(Error::Crate("pub".to_string(), "unknown codec".to_string()));
 		}
 
-		catalog_track.set_selection_params(params).set_init_data(&init);
+		catalog_track
+			.set_selection_params(params)
+			.set_init_data(&init)
+			.set_label(&track_name);
 
 		if let Err(e) = self.catalog.insert_track(catalog_track) {
 			println!("Error: {}", e);
