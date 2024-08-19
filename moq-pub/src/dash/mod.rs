@@ -75,14 +75,14 @@ impl Dash {
 		let (session, mut publisher, writer, reader) = create(self.info).await?;
 
 		tokio::select! {
-			res = session.run() => res.unwrap(),
-			res = run(&self.output, writer, self.settings) => res.unwrap(),
-			res = publisher.announce(reader) => res.unwrap(),
-			res = close() => res.unwrap(),
-			res = read_output(output) => res.unwrap(),
+			res = session.run() => println!("Session: {:#?}", res),
+			res = run(&self.output, writer, self.settings) => println!("run: {:#?}", res),
+			res = publisher.announce(reader) => println!("Publisher: {:#?}", res),
+			res = close() => println!("close: {:#?}", res),
+			res = read_output(output) => println!("output: {:#?}", res),
 		}
 
-		log::info!("received termination signal, closing gracefully");
+		log::info!("termination initiated, cleaning up");
 
 		if let Err(e) = ffmpeg.kill() {
 			println!("Error: {}", e);
