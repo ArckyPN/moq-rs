@@ -75,6 +75,11 @@ where
 }
 
 pub fn append_shell(buf: &mut Vec<u8>, slice: &[String]) {
+	let slice = if slice[0] == "-adaptation_sets" {
+		vec![slice[0].clone(), format!("\"{}\"", slice[1])]
+	} else {
+		slice.to_vec()
+	};
 	let mut b = format!(" \\\n\t{}", slice.join(" "))
 		.replace('$', "\\$")
 		.as_bytes()
