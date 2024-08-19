@@ -7,4 +7,13 @@ pub enum Error {
 
 	#[error("failed to convert")]
 	FailedToConvert,
+
+	#[error("Crate {0} Error: {1}")]
+	Crate(String, String),
+
+	#[error("missing key")]
+	Missing,
+
+	#[error("check previous logs")]
+	Other,
 }

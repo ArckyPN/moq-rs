@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::time;
 
+const LABEL: &str = "Dash MoQ";
+
 pub struct Media {
 	// Tracks based on their track ID.
 	tracks: HashMap<u32, Track>,
@@ -36,7 +38,7 @@ impl Media {
 
 		let mut csf = moq_catalog::CommonStructFields::new("", moq_catalog::Packaging::CMAF);
 		csf.set_alt_group(1)
-			.set_label("Dash MoQ")
+			.set_label(LABEL)
 			.set_namespace(&broadcast.namespace);
 
 		catalog.enable_delta_updates().set_common_track_fields(csf);
@@ -99,23 +101,27 @@ impl Media {
 				// Process the moof.
 				let fragment = Fragment::new(moof)?;
 
-				if fragment.keyframe {
-					// Gross but thanks to rust we have to do a separate hashmap lookup
-					if self
-						.tracks
-						.get(&fragment.track)
-						.context("failed to find track")?
-						.handler == TrackType::Video
-					{
-						// Start a new group for the keyframe.
-						for track in self.tracks.values_mut() {
-							track.end_group();
-						}
-					}
-				}
+				// if fragment.keyframe {
+				// 	// Gross but thanks to rust we have to do a separate hashmap lookup
+				// 	if self
+				// 		.tracks
+				// 		.get(&fragment.track)
+				// 		.context("failed to find track")?
+				// 		.handler == TrackType::Video
+				// 	{
+				// 		// Start a new group for the keyframe.
+				// 		for track in self.tracks.values_mut() {
+				// 			track.end_group();
+				// 		}
+				// 	}
+				// }
 
 				// Get the track for this moof.
 				let track = self.tracks.get_mut(&fragment.track).context("failed to find track")?;
+
+				if fragment.keyframe {
+					track.end_group();
+				}
 
 				// Save the track ID for the next iteration, which must be a mdat.
 				anyhow::ensure!(self.current.is_none(), "multiple moof atoms");
@@ -130,7 +136,13 @@ impl Media {
 				let track = self.tracks.get_mut(&track).context("failed to find track")?;
 
 				// Publish the mdat atom.
-				track.data(atom).context("failed to publish mdat")?;
+				if let Some(prft) = self.prft.clone() {
+					let mut data = atom.clone().to_vec();
+					data.extend_from_slice(&prft);
+					track.data(data.into()).context("failed to publish prft")?;
+				} else {
+					track.data(atom).context("failed to publish mdat")?;
+				}
 			}
 
 			_ => {
@@ -145,7 +157,7 @@ impl Media {
 		// Create a track for each track in the moov
 		for trak in &moov.traks {
 			let id = trak.tkhd.track_id;
-			let name = format!("{}.m4s", id);
+			let name = format!("{LABEL} {}", id);
 
 			let timescale = track_timescale(moov, id);
 			let handler = (&trak.mdia.hdlr.handler_type).try_into()?;
@@ -167,7 +179,7 @@ impl Media {
 
 		// Produce the catalog
 		for trak in &moov.traks {
-			let rep_id = format!("{}.m4s", trak.tkhd.track_id);
+			let rep_id = format!("{LABEL} {}", trak.tkhd.track_id);
 			let mut track = moq_catalog::Track::new(&rep_id, moq_catalog::Packaging::CMAF);
 			let mut params = moq_catalog::SelectionParams::new();
 

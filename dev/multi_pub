@@ -1,0 +1,111 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Change directory to the root of the project
+cd "$(dirname "$0")/.."
+
+INPUT="/dev/video0"
+NAME="dash"
+URL="https://localhost:4443"
+
+gcd() (
+    if (( $1 % $2 == 0)); then
+        echo "$2"
+    else
+        gcd "$2" $(( $1 % $2 ))
+    fi
+)
+
+seg_dur() {
+    A=$((1024 * $1))
+    DIV=$(gcd "$A" "$2")
+    bc -l <<< "1024.0 / $DIV"
+}
+
+print_usage() {
+    echo "Usage:"
+    echo "$0 -i <input> -n <name>"
+    echo "  -i path to input, default: $INPUT"
+    echo "  -n name of the broadcast, default: $NAME"
+    echo "  -h print this help"
+}
+
+while getopts "i:n:h" flag; do
+    case "${flag}" in
+        i) INPUT="${OPTARG}" ;;
+        n) NAME="${OPTARG}" ;;
+        h) print_usage 
+            exit 0 ;;
+        *) print_usage
+            exit 0 ;;
+    esac
+done
+
+# Use debug logging by default
+export RUST_LOG="${RUST_LOG:-info}"
+export RUST_BACKTRACE="${RUST_BACKTRACE:-full}"
+
+AUDIO_SAMPLING=48000
+AUDIO_BITRATE=128000
+FPS=25
+KEYFRAMES_PER_SEG=1
+SEG_DUR=$(seg_dur $FPS $AUDIO_SAMPLING)
+GOP_SIZE=$(bc -l <<< "$SEG_DUR * $FPS * $KEYFRAMES_PER_SEG")
+
+res0=256x144
+res1=640x360
+res2=1280x720
+
+bitrate0=100000
+bitrate1=300000
+bitrate2=3000000
+
+minrate0=33000
+minrate1=100000
+minrate2=1000000
+
+maxrate0=150000
+maxrate1=450000
+maxrate2=4500000
+
+bufsize0=100000
+bufsize1=300000
+bufsize2=3000000
+
+BITRATES="$AUDIO_BITRATE,$bitrate0,$bitrate1,$bitrate2"
+
+if [[ "$INPUT" == "/dev/video0" ]]; then 
+    INPUT_FLAGS="-f alsa -ac 2 -thread_queue_size 512 -i default -f video4linux2 -s $res2 -r $FPS -i $INPUT"
+else 
+    INPUT_FLAGS="-i $INPUT"
+    echo "non webcam input currently not supported"
+    exit 1
+fi
+
+ffmpeg -re -stream_loop -1 -hide_banner -v quiet -probesize 10M $INPUT_FLAGS -r "$FPS" -fflags nobuffer \
+    -preset ultrafast -pix_fmt yuv420p \
+    -f mp4 -c:v libx264 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame \
+    -map 0:a -map 1:v -map 1:v -map 1:v \
+    -s:v:0 ${res0} -b:v:0 ${bitrate0} -minrate:v:0 ${minrate0} -maxrate:v:0 ${maxrate0} -bufsize:v:0 ${bufsize0} \
+    -s:v:1 ${res1} -b:v:1 ${bitrate1} -minrate:v:0 ${minrate1} -maxrate:v:0 ${maxrate1} -bufsize:v:0 ${bufsize1} \
+    -s:v:2 ${res2} -b:v:2 ${bitrate2} -minrate:v:0 ${minrate2} -maxrate:v:0 ${maxrate2} -bufsize:v:0 ${bufsize2} \
+    -c:a aac -b:a "$AUDIO_BITRATE" -ar "$AUDIO_SAMPLING" \
+    -write_prft wallclock \
+    -g:v "$GOP_SIZE" -keyint_min:v "$GOP_SIZE" -sc_threshold:v 0 -streaming 1 -tune zerolatency \
+    -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+    -frag_type duration -frag_duration 1 - | cargo run --bin moq-pub -- run --bitrate "$BITRATES" --name "$NAME" "$URL"
+
+# ffmpeg -f alsa -ac 2 -i default -f video4linux2 -s 1280x720 -r 25 -i /dev/video0 out.mp4
+
+# INPUT="../media/source.mp4"
+# ffmpeg -hide_banner -v quiet \
+# 	-stream_loop -1 -re \
+# 	-i "$INPUT" \
+#     -map 0 -map 0 -map 0 \
+#     -s:v:0 ${res0} -b:v:0 ${bitrate0} -minrate:v:0 ${minrate0} -maxrate:v:0 ${maxrate0} -bufsize:v:0 ${bufsize0} \
+#     -s:v:1 ${res1} -b:v:1 ${bitrate1} -minrate:v:0 ${minrate1} -maxrate:v:0 ${maxrate1} -bufsize:v:0 ${bufsize1} \
+#     -s:v:2 ${res2} -b:v:2 ${bitrate2} -minrate:v:0 ${minrate2} -maxrate:v:0 ${maxrate2} -bufsize:v:0 ${bufsize2} \
+# 	-c:v libx264 -an \
+# 	-f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame \
+# 	- | cargo run --bin moq-pub -- run --bitrate "$bitrate0,$bitrate1,$bitrate2" --name "$NAME" "$URL" "$@"

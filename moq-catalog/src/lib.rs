@@ -181,7 +181,7 @@ impl MoqCatalog {
 impl std::fmt::Display for MoqCatalog {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut out = format!(
-			"MoqCatalog: v{}, format: {} Version {}\n",
+			"MoqCatalog v{}, format: {} Version {}\n",
 			self.version, self.streaming_format, self.streaming_format_version
 		);
 		if self.tracks.is_some() {

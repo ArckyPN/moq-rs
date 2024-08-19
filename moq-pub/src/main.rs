@@ -152,9 +152,9 @@ async fn run_media(mut media: Media) -> anyhow::Result<()> {
 }
 
 async fn run_dash(cli: Dash) -> anyhow::Result<()> {
-	let ffmpeg = dash::FFmpeg::new(cli)?;
+	let dash = dash::Dash::new(cli)?;
 
-	ffmpeg.run().await?;
+	dash.run().await?;
 
 	Ok(())
 }

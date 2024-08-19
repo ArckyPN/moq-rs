@@ -3,25 +3,31 @@ use std::{fs, path};
 use super::Error;
 
 /// create full directory path
-pub fn init_output<P>(output: P) -> anyhow::Result<()>
+pub fn init_output<P>(output: P) -> Result<(), Error>
 where
 	P: AsRef<path::Path>,
 {
-	fs::create_dir_all(output)?;
+	if let Err(e) = fs::create_dir_all(output) {
+		println!("Error: {}", e);
+		return Err(Error::Crate("fs".to_string(), e.to_string()));
+	}
 	Ok(())
 }
 
 /// remove directory and all its contents
-pub fn clear_output<P>(output: P) -> anyhow::Result<()>
+pub fn clear_output<P>(output: P) -> Result<(), Error>
 where
 	P: AsRef<path::Path>,
 {
-	fs::remove_dir_all(output)?;
+	if let Err(e) = fs::remove_dir_all(output) {
+		println!("Error: {}", e);
+		return Err(Error::Crate("fs".to_string(), e.to_string()));
+	}
 	Ok(())
 }
 
 /// split byte `vec` at the first occurrence of `sep`
-pub fn split_vec_once(vec: Vec<u8>, sep: &[u8]) -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
+pub fn split_vec_once(vec: Vec<u8>, sep: &[u8]) -> (Vec<u8>, Vec<u8>) {
 	let mut first = Vec::new();
 	let mut second = Vec::new();
 
@@ -43,7 +49,7 @@ pub fn split_vec_once(vec: Vec<u8>, sep: &[u8]) -> anyhow::Result<(Vec<u8>, Vec<
 		i += 1;
 	}
 
-	Ok((first, second))
+	(first, second)
 }
 
 /// attempts to convert `path` to a String
@@ -55,12 +61,12 @@ where
 }
 
 /// removes possible trailing ".tmp"
-pub fn clean_path<P>(path: P) -> anyhow::Result<String>
+pub fn clean_path<P>(path: P) -> Result<String, Error>
 where
 	P: AsRef<path::Path>,
 {
 	let Some(path) = path_to_string(path) else {
-		return Err(Error::FailedToConvert.into());
+		return Err(Error::FailedToConvert);
 	};
 
 	let path = path.replace(".tmp", "");
