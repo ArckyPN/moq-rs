@@ -2,6 +2,8 @@ use bytes::Buf;
 
 use super::{helper, Error};
 
+const INPUT_DEFAULT: &str = "/dev/video0";
+
 #[derive(Debug, Clone)]
 pub struct Settings<P>
 where
@@ -71,7 +73,7 @@ where
 		};
 
 		let fps = format!("{}", self.fps);
-		if input == "/dev/video0" {
+		if input == INPUT_DEFAULT {
 			input_args.append(&mut vec![
 				"-f",
 				"alsa",
@@ -99,7 +101,7 @@ where
 		let mut args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
 
 		args.append(&mut self.audio());
-		args.append(&mut self.qualities());
+		args.append(&mut self.qualities()?);
 
 		let gop = format!(
 			"{}",
@@ -176,31 +178,38 @@ where
 		Ok(args)
 	}
 
-	fn qualities(&self) -> Vec<String> {
+	fn qualities(&self) -> Result<Vec<String>, Error> {
+		let Some(input) = self.input.as_ref().to_str() else {
+			println!("Error: input path is not a valid string");
+			return Err(Error::FailedToConvert);
+		};
+
 		let mut args = Vec::new();
 
 		for (i, rep) in self.video.iter().enumerate() {
-			args.push("-map".to_string());
-			if self.no_audio || self.audio.is_empty() {
-				args.push("0:v".to_string())
+			let map = if self.no_audio || self.audio.is_empty() || input != INPUT_DEFAULT {
+				"0:v:0".to_string()
 			} else {
-				args.push("1:v".to_string())
-			}
+				"1:v:0".to_string()
+			};
 
-			args.push(format!("-s:v:{i}"));
-			args.push(rep.resolution.clone());
+			let mut arg = vec![
+				"-map".to_string(),
+				map,
+				format!("-s:v:{i}"),
+				rep.resolution.clone(),
+				format!("-b:v:{i}"),
+				format!("{}", rep.bitrate),
+				format!("-maxrate:v:{i}"),
+				format!("{}", rep.max_rate),
+				format!("-bufsize:v:{i}"),
+				format!("{}", rep.buffer_size),
+			];
 
-			args.push(format!("-b:v:{i}"));
-			args.push(format!("{}", rep.bitrate));
-
-			args.push(format!("-maxrate:v:{i}"));
-			args.push(format!("{}", rep.max_rate));
-
-			args.push(format!("-bufsize:v:{i}"));
-			args.push(format!("{}", rep.buffer_size));
+			args.append(&mut arg);
 		}
 
-		args
+		Ok(args)
 	}
 
 	fn audio(&self) -> Vec<String> {
@@ -213,7 +222,7 @@ where
 		for (i, rep) in self.audio.iter().enumerate() {
 			let mut arg = vec![
 				"-map".to_string(),
-				"0:a".to_string(),
+				"0:a:0".to_string(),
 				format!("-c:a:{i}"),
 				"aac".to_string(),
 				format!("-b:a:{i}"),
@@ -330,41 +339,50 @@ where
 	}
 
 	pub fn save(&self, path: P) -> Result<(), Error> {
-		// TODO fix paths to make work from the save location
 		let args = self.to_args()?;
 		let mut buf = b"#!/bin/bash\n\n".to_vec();
 
-		let mut ffmpeg = "ffmpeg".as_bytes().to_vec();
+		let mut ffmpeg = b"ffmpeg".to_vec();
 		buf.append(&mut ffmpeg);
 
+		// check if there is a webcam input (double -f -i inputs)
 		let f_pos = args.iter().position(|arg| arg == "-f").unwrap();
 		let i_pos = args.iter().position(|arg| arg == "-i").unwrap();
-
 		let args = if f_pos < i_pos {
+			// when there if a format before input, append all flags until first -f
 			let (input, args) = args.split_at(args.iter().position(|arg| arg == "-f").unwrap_or_default());
 			helper::append_shell(&mut buf, input);
 			args
 		} else {
+			// do nothing otherwise
 			&args
 		};
 
+		// find the first input flags
 		let (input, args) = args.split_at(args.iter().position(|arg| arg == "-i").unwrap_or_default() + 2);
 		helper::append_shell(&mut buf, input);
 
-		let (input, args) = args.split_at(args.iter().position(|arg| arg == "-i").unwrap_or_default() + 2);
+		// try to find the second input flag, if found append
+		let (input, args) = args.split_at(args.iter().position(|arg| arg == "-map").unwrap_or_default());
 		if !input.is_empty() {
 			helper::append_shell(&mut buf, input);
 		}
 
+		// find all audio flags, append in chunks of 8
 		let (input, args) = args.split_at(args.iter().position(|arg| arg == "-s:v:0").unwrap_or_default() - 2);
-		helper::append_shell(&mut buf, input);
+		let chunks = input.chunks(8);
+		for chunk in chunks {
+			helper::append_shell(&mut buf, chunk);
+		}
 
+		// find all video flags, append in chunks of 10
 		let (streams, args) = args.split_at(args.iter().position(|arg| arg == "-f").unwrap_or_default());
 		let chunks = streams.chunks(10);
 		for chunk in chunks {
 			helper::append_shell(&mut buf, chunk);
 		}
 
+		// append the rest in chunks of 2
 		let chunks = args.chunks(2);
 		for chunk in chunks {
 			helper::append_shell(&mut buf, chunk);
