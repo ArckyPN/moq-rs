@@ -56,7 +56,7 @@ pub struct MoqCatalog {
 	/// false.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-supports-delta-updates)
-	#[serde(rename = "supportsDeltaUpdates", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "supportsDeltaUpdates")]
 	supports_delta_updates: Option<bool>,
 
 	/// Common Track Fields
@@ -67,7 +67,7 @@ pub struct MoqCatalog {
 	/// any value inherited from the Common Track Fields object.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-common-track-fields)
-	#[serde(rename = "commonTrackFields", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "commonTrackFields")]
 	common_track_fields: Option<CommonStructFields>,
 
 	/// Tracks
@@ -76,7 +76,6 @@ pub struct MoqCatalog {
 	/// present then the 'catalog' field MUST NOT be present.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#section-3.2.5)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	tracks: Option<Vec<Track>>,
 
 	/// Catalogs
@@ -86,7 +85,6 @@ pub struct MoqCatalog {
 	/// MUST NOT list itself in the catalog array.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-catalogs)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	catalogs: Option<Vec<Catalog>>,
 }
 
@@ -316,7 +314,7 @@ pub struct Catalog {
 	/// false.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-supports-delta-updates)
-	#[serde(rename = "supportsDeltaUpdates", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "supportsDeltaUpdates")]
 	supports_delta_updates: Option<bool>,
 
 	/// Track Namespace
@@ -330,7 +328,6 @@ pub struct Catalog {
 	/// space.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-track-namespace)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	namespace: Option<String>,
 
 	/// Track Name
@@ -395,7 +392,6 @@ pub struct CommonStructFields {
 	/// space.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-track-namespace)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	namespace: Option<String>,
 
 	/// Track Name
@@ -428,7 +424,6 @@ pub struct CommonStructFields {
 	/// spec requires UTF-8 support by decoders.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-track-label)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	label: Option<String>,
 
 	/// Render Group
@@ -440,7 +435,7 @@ pub struct CommonStructFields {
 	/// audio and video tracks.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-render-group)
-	#[serde(rename = "renderGroup", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "renderGroup")]
 	render_group: Option<usize>,
 
 	/// Alternate Group
@@ -455,7 +450,7 @@ pub struct CommonStructFields {
 	/// bitrates.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-alternate-group)
-	#[serde(rename = "altGroup", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "altGroup")]
 	alt_group: Option<usize>,
 
 	/// Initialization Data
@@ -464,7 +459,7 @@ pub struct CommonStructFields {
 	/// encoded initialization data for the track.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-initialization-data)
-	#[serde(rename = "initData", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "initData")]
 	init_data: Option<String>, // use base64 lib
 
 	/// Initialization Track
@@ -476,7 +471,7 @@ pub struct CommonStructFields {
 	/// they initialize.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-initialization-track)
-	#[serde(rename = "initTrack", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "initTrack")]
 	init_track: Option<String>,
 
 	/// Selection Parameters
@@ -490,7 +485,7 @@ pub struct CommonStructFields {
 	/// inherited root value.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-selection-parameters)
-	#[serde(rename = "selectionParams", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "selectionParams")]
 	selection_params: Option<SelectionParams>,
 }
 
@@ -552,7 +547,6 @@ pub struct Track {
 	/// or catalog object overwrites any inherited name space.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-track-namespace)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	namespace: Option<String>,
 
 	/// Track Name
@@ -585,7 +579,6 @@ pub struct Track {
 	/// support by decoders.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-track-label)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	label: Option<String>,
 
 	/// Render Group
@@ -597,7 +590,7 @@ pub struct Track {
 	/// audio and video tracks.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-render-group)
-	#[serde(rename = "renderGroup", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "renderGroup")]
 	render_group: Option<usize>,
 
 	/// Alternate Group
@@ -612,7 +605,7 @@ pub struct Track {
 	/// bitrates.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-alternate-group)
-	#[serde(rename = "altGroup", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "altGroup")]
 	alt_group: Option<usize>,
 
 	/// Initialization Data
@@ -621,7 +614,7 @@ pub struct Track {
 	/// encoded initialization data for the track.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-initialization-data)
-	#[serde(rename = "initData", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "initData")]
 	init_data: Option<String>, // use base64 lib
 
 	/// Initialization Track
@@ -633,7 +626,7 @@ pub struct Track {
 	/// they initialize.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-initialization-track)
-	#[serde(rename = "initTrack", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "initTrack")]
 	init_track: Option<String>,
 
 	/// Selection Parameters
@@ -647,7 +640,7 @@ pub struct Track {
 	/// inherited root value.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-selection-parameters)
-	#[serde(rename = "selectionParams", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "selectionParams")]
 	selection_params: Option<SelectionParams>,
 
 	/// Dependencies
@@ -659,7 +652,6 @@ pub struct Track {
 	/// declaring the dependencies.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-dependencies)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	depends: Option<Vec<String>>,
 
 	/// Temporal ID
@@ -669,7 +661,7 @@ pub struct Track {
 	/// temporal fidelity.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-temporal-id)
-	#[serde(rename = "temporalId", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "temporalId")]
 	temporal_id: Option<usize>,
 
 	/// Spatial ID
@@ -679,7 +671,7 @@ pub struct Track {
 	/// fidelity.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-spatial-id)
-	#[serde(rename = "spatialId", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "spatialId")]
 	spatial_id: Option<usize>,
 }
 
@@ -757,7 +749,6 @@ pub struct SelectionParams {
 	/// in XXX.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-codec)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	codec: Option<String>,
 
 	/// Mimetype
@@ -767,7 +758,7 @@ pub struct SelectionParams {
 	/// CMAF packaged content.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-mimetype)
-	#[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "mimeType")]
 	mime_type: Option<String>,
 
 	/// Framerate
@@ -776,7 +767,6 @@ pub struct SelectionParams {
 	/// second.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-framerate)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	framerate: Option<u64>,
 
 	/// Bitrate
@@ -784,7 +774,6 @@ pub struct SelectionParams {
 	/// A number defining the bitrate of track, expressed in bits second.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-bitrate)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	bitrate: Option<u64>,
 
 	/// Width
@@ -792,7 +781,6 @@ pub struct SelectionParams {
 	/// A number expressing the encoded width of the track content in pixels.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-width)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	width: Option<u16>,
 
 	/// Height
@@ -800,7 +788,6 @@ pub struct SelectionParams {
 	/// A number expressing the encoded height of the video frames in pixels.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-height)
-	#[serde(skip_serializing_if = "Option::is_none")]
 	height: Option<u16>,
 
 	/// Audio Sample Rate
@@ -809,7 +796,7 @@ pub struct SelectionParams {
 	/// only accompany audio codecs.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-audio-sample-rate)
-	#[serde(rename = "samplerate", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "samplerate")]
 	sample_rate: Option<u16>,
 
 	/// Channel Config
@@ -820,7 +807,7 @@ pub struct SelectionParams {
 	/// for multi-channel and Next Generation Audio schemas.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-channel-configuration)
-	#[serde(rename = "channelConfig", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "channelConfig")]
 	channel_config: Option<String>,
 
 	/// Display Width
@@ -829,7 +816,7 @@ pub struct SelectionParams {
 	/// in pixels.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-display-width)
-	#[serde(rename = "displayWidth", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "displayWidth")]
 	display_width: Option<u16>,
 
 	/// Display Height
@@ -838,7 +825,7 @@ pub struct SelectionParams {
 	/// in pixels.
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-display-height)
-	#[serde(rename = "displayHeight", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "displayHeight")]
 	display_height: Option<u16>,
 
 	/// Language
@@ -848,7 +835,7 @@ pub struct SelectionParams {
 	/// by [LANG](https://www.rfc-editor.org/rfc/rfc5646).
 	///
 	/// Source: [draft-ietf-moq-catalogformat-01](https://www.ietf.org/archive/id/draft-ietf-moq-catalogformat-01.html#name-language)
-	#[serde(rename = "lang", skip_serializing_if = "Option::is_none")]
+	#[serde(rename = "lang")]
 	language: Option<String>,
 }
 
