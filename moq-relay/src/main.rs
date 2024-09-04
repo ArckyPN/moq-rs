@@ -2,6 +2,7 @@ use clap::Parser;
 
 mod api;
 mod consumer;
+mod limiter;
 mod local;
 mod producer;
 mod relay;
