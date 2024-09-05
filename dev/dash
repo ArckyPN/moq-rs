@@ -24,6 +24,5 @@ done
 
 # Use debug logging by default
 export RUST_LOG="${RUST_LOG:-info}"
-export RUST_BACKTRACE="${RUST_BACKTRACE:-full}"
 
 cargo run --bin moq-pub -- dash --name "$NAME" --input "$INPUT" --output "../media/$NAME" https://localhost:4443
